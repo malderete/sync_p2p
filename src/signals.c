@@ -35,30 +35,26 @@ signals_initialize() {
 	action.sa_flags = SA_RESTART; // SA_RESTART == 0
 
 	// Manejador de CTRL+C
-	if(sigaction(SIGINT, &action, NULL) == -1)
-	{
+	if(sigaction(SIGINT, &action, NULL) == -1) {
 		perror("signals_initialize():");
 		return -1;
 	}
 
 	// Manejador de kill
 	action.sa_handler = &signals_handler;
-	if(sigaction(SIGTERM, &action, NULL) == -1)
-	{
+	if(sigaction(SIGTERM, &action, NULL) == -1) {
 		perror("signals_initialize():");
 		return -1;
 	}
 
 	// Ignoramos SIGHUP y SYSQUIT
 	action.sa_handler = SIG_IGN;
-	if(sigaction(SIGHUP, &action, NULL) == -1)
-	{
+	if(sigaction(SIGHUP, &action, NULL) == -1) {
 		perror("signals_initialize():");
 		return -1;
 	}
 
-	if(sigaction(SIGQUIT, &action, NULL) == -1)
-	{
+	if(sigaction(SIGQUIT, &action, NULL) == -1) {
 		perror("signals_initialize():");
 		return -1;
 	}

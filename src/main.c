@@ -31,21 +31,52 @@ char pipe_buf[PIPE_SIZE];
 Server server;
 SessionList* sessions = NULL;
 //extern Config config;
+char* config_filename;
 
 
-void
-add_knode(const char* ip, const char* port, int index) {
-	char* aux_ip = strdup(ip);
-	server.known_clients[index] = aux_ip;
+static void
+show_help(char** argv) {
+    printf(
+        "IW Sync_P2P Server v 0.1\n\n"
+        "  -h            Muestra esta ayuda.\n"
+        "  -c <archivo>  Especifica el archivo de configuracion (Path absoluto).\n"
+        "Uso:\n"
+        "   %s -c file.json\n",
+        argv[0]
+    );
+    exit(EXIT_SUCCESS);
+}
+
+
+static int
+parse_arguments(int argc, char** argv) {
+	int c;
+	while((c = getopt(argc, argv, "hc:")) != -1) {
+		switch(c) {
+			case 'h':
+				show_help(argv);
+				break;
+			case 'c':
+				config_filename = strdup(optarg);
+				fprintf(stdout, "[*] Archivo de configuracion: %s\n", config_filename);
+				break;
+			case '?':
+				fprintf(stderr, "[!] Opcion invalida\n");
+				return -1;
+			default:
+				return -1;
+		}
+	}
+	return 0;
 }
 
 
 int
-config_load() {
+config_load(char* config_filename) {
     json_t *json;
     json_error_t error;
 
-    json = json_load_file(CONFIG_FILE_PATH, 0, &error);
+    json = json_load_file(config_filename, 0, &error);
     if(!json) {
     	printf("error: on line %d: %s\n", error.line, error.text);
     	return 1;
@@ -63,7 +94,8 @@ config_load() {
     }
     for(i = 0; i < size; i++) {
     	json_t *data, *ip, *port;
-    	const char *ip_text, *port_text;
+    	const char* ip_text;
+    	const char* port_text;
 
     	data = json_array_get(json, i);
     	if(!json_is_object(data)) {
@@ -86,7 +118,7 @@ config_load() {
     	}
     	ip_text = json_string_value(ip);
     	port_text = json_string_value(port);
-    	add_knode(ip_text, port_text, i);
+    	server.known_clients[i] = strdup(ip_text);
     }
     json_decref(json);
     return 0;
@@ -94,7 +126,7 @@ config_load() {
 
 
 int
-main(int argc, char* argv[]) {
+main(int argc, char** argv) {
     pid_t pid;
 
     // Inicializamos el chunk de memoria
@@ -111,8 +143,19 @@ main(int argc, char* argv[]) {
          server_parse_arguments(argc, argv) (Tenemos?)
          Iniciar el file_system_reader() (?)
     */
-    config_load();
-    signals_initialize();
+    if (parse_arguments(argc, argv) == -1) {
+    	fprintf(stderr, "[!] Error parseando argumentos.\n");
+    	return EXIT_FAILURE;
+    }
+    //config_filename = CONFIG_FILE_PATH;
+    if (config_load(config_filename) == 1) {
+    	fprintf(stderr, "[!] Error parseando archivo de configuracion.\n");
+    	return EXIT_FAILURE;
+    }
+    if (signals_initialize() == -1) {
+    	fprintf(stderr, "[!] Error iniciando los manejadores de signals.\n");
+    	return EXIT_FAILURE;
+    }
 
     server.name = "IW Test Server";
     server.status = SERVER_STATUS_INACTIVE;
@@ -124,24 +167,25 @@ main(int argc, char* argv[]) {
     pid = fork();
     if (pid == -1) {
         perror("fork");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     // El Parent es un server single-thread que atiende clientes
     // El Child es un proceso que planifica threads con las descargas
     // Para comunicar los dos usamos un pipe.
 
-    if (!pid) {
+    if (pid == 0) { //CHILD
+         printf(
+        		 "[*] HIJO Creado, iniciando cliente (PID=%d)\n:"
+        		 " Esperando datos en el PIPE...\n", getpid()
+        );
          // Cerramos el fd del pipe para escribir
          close(pipe_fds[1]);
-         printf("HIJO Creado (PID: %d -- PPID: %d):"
-            " Esperando datos en el PIPE...\n", getpid(), getppid());
-	     //TODO: checkeos
          downloader_init_stack();
-    } else {
-        printf("Server iniciado PID: %d\n", getpid());
+    } else { //PARENT
+        printf("[*] Iniciando server(PID=%d)\n", getpid());
         if (server_init_stack() == -1) {
-            printf("Problemas al iniciar el servidor\n");
+            fprintf(stderr, "[!] Problemas al iniciar el servidor\n");
 	        //TODO: Avisar al hijo que algo salio mal(?)
         }
         // Antes de salir esperamos al otro hijo!
