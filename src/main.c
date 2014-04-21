@@ -139,7 +139,7 @@ main(int argc, char** argv) {
 
     /*TODO: Antes del fork() tenemos que
          config_load() donde cargamos toda la conf y alguna magia...
-         sysgnals_initialize() Manejador de signals
+         sygnals_initialize() Manejador de signals
          server_parse_arguments(argc, argv) (Tenemos?)
          Iniciar el file_system_reader() (?)
     */
@@ -156,6 +156,8 @@ main(int argc, char** argv) {
     	fprintf(stderr, "[!] Error iniciando los manejadores de signals.\n");
     	return EXIT_FAILURE;
     }
+    //directory = CONFIG_DEFAULT_SERVER_DIR;
+    //filesystem_load(directory)
 
     server.name = "IW Test Server";
     server.status = SERVER_STATUS_INACTIVE;

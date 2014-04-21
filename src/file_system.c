@@ -2,8 +2,11 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <dirent.h> //gnu opendir
+#include <fcntl.h>
+#include <unistd.h> 
 #include <sys/stat.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include "include/file_system.h"
 
@@ -11,15 +14,17 @@ static FileInfo **files_table;
 static int size;
 
 
-/**
- *  List files in a directory, exclude hidden files
- **/
+/*
+ *  Lists *ONLY* files in a directory,
+ *  excluding hidden files and folders.
+ */
 void
 _list_dir(const char *dir_name, int *size) {
 	DIR *dp;
 	struct dirent *ep;
-	struct stat file_status;
+	struct stat file_stat;
 	int i;
+    int fd;
 	FileInfo *tmp;
 
 	const int len_dir_name = strlen(dir_name);
@@ -41,16 +46,27 @@ _list_dir(const char *dir_name, int *size) {
 	i = 0;
 	while((ep = readdir(dp))) {
 		if (ep->d_name[0] != '.') {
-			//Allocate a new node_s and add it to the array
-			tmp = (FileInfo *)malloc(sizeof(FileInfo));
-			tmp->filename = ep->d_name;
-			char *path = malloc(len_dir_name + strlen(ep->d_name) + 2);
+			char *path = malloc(len_dir_name + strlen(ep->d_name) + 1);
 			//Concatenation
 			strncpy(path, dir_name, len_dir_name);
 			strncat(path, ep->d_name, strlen(ep->d_name));
-			//end concatenation
-			stat(path, &file_status);
-			tmp->bytes = file_status.st_size;
+			//end concatenation 
+            //File stats
+			stat(path, &file_stat);
+            if (!S_ISREG(file_stat.st_mode)) {
+                printf("Skipping folder: %s\n", path);
+                continue;
+            }
+			//Allocate a FileInfo, fill it and add it to the array
+			tmp = (FileInfo *)malloc(sizeof(FileInfo));
+			tmp->filename = ep->d_name;
+            tmp->abs_path = path;
+			tmp->bytes = file_stat.st_size;
+            //Memory map file
+            fd = open(path, O_RDONLY);
+            tmp->content = mmap(0, file_stat.st_size, PROT_READ, MAP_SHARED, fd, 0);
+            close(fd);
+            //Add to the array
 			files_table[i] = tmp;
 			i++;
 		}
@@ -60,11 +76,12 @@ _list_dir(const char *dir_name, int *size) {
 }
 
 
+/*
+ * Serialize the info about the files
+ * into buffer.
+ */
 void
 serialize_files(char *buffer) {
-	/*
-	 * hola:21;asdad:123\n
-	 */
 	int j = 0;
 	int paddin = 0;
 	int size_local = 0;
@@ -88,17 +105,30 @@ print(int size) {
 	}
 }
 
-void list_dir(const char *dir_name) {
+
+/*
+ * Initilize the FS module, loading 
+ * the files inside the given directory 
+ */
+void
+filesystem_load(const char *dir_name) {
 	_list_dir(dir_name, &size);
 }
 
+
 /*
 int
-main (void) {
+main (int argc, char* argv[]) {
+    if (argc < 2) {
+        fprintf (stderr, "usage: %s <file index>\n", argv[0]);
+        return 1;    
+    }
+
+    off_t i;
 	char *buffer;
 	buffer = malloc(500);
 	const char* dir_name = "/home/tincho/proyectos/iw/";
-	list_dir(dir_name, &size);
+	list_dir(dir_name);
 	//printf("Size: %d\n", size);
 	//printf("Listando el directorio: %s\n", dir_name);
 	//print(size);
@@ -106,6 +136,18 @@ main (void) {
 	serialize_files(buffer);
 	printf("BUFFER: %s\n", buffer);
 	printf("SIZE: %d\n", strlen(buffer));
+    FileInfo *f_aux;
+    
+    f_aux = (FileInfo*)malloc(sizeof(FileInfo));
+    f_aux = files_table[atoi(argv[1])];
+    printf("Filename: %s,  Size: %d bytes\n", f_aux->filename, f_aux->bytes);
+    i = 0;
+    fprintf(stderr, "Contenido\n\n");
+    for(i=0; i < f_aux->bytes; i++) {
+        printf("%c", f_aux->content[i]);
+    }
+    fprintf(stderr, "\n\nFin\n");
 	return 0;
 }
+
 */
