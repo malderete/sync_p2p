@@ -8,6 +8,7 @@
 #include <netdb.h>
 
 #include "include/main.h"
+#include "include/file_system.h"
 #include "include/server.h"
 #include "include/protocol.h"
 #include "include/sessions.h"
@@ -58,6 +59,10 @@ void handle_message(int sd, uint16_t message_code, char * message) {
         case EXIST_FILE: //Este es un mensaje que no se si tendremos...
                         // La info la podemos mandar en REQUEST_FILE
             printf("El cliente %d solicita info de un archivo\n", sd);
+            FileInfo* file_i;
+            file_i = NULL;
+            file_i = file_system_get(message);
+            printf("Path: %s size: %d\n", file_i->abs_path, file_i->bytes);
             break;
     }
     // Por ahora es un 'triste' ACK de prueba...xD

@@ -46,17 +46,18 @@ _list_dir(const char *dir_name, int *size) {
 	i = 0;
 	while((ep = readdir(dp))) {
 		if (ep->d_name[0] != '.') {
-			char *path = malloc(len_dir_name + strlen(ep->d_name) + 1);
-			//Concatenation
-			strncpy(path, dir_name, len_dir_name);
-			strncat(path, ep->d_name, strlen(ep->d_name));
-			//end concatenation 
-            //File stats
-			stat(path, &file_stat);
+            char *path = malloc(len_dir_name + strlen(ep->d_name) + 2);
+            memset(path, 0, len_dir_name + strlen(ep->d_name) + 2);
+            //Concatenation
+            strncpy(path, dir_name, len_dir_name);
+            strncat(path, ep->d_name, strlen(ep->d_name));
+            //end concatenation
+            stat(path, &file_stat);
             if (!S_ISREG(file_stat.st_mode)) {
                 printf("Skipping folder: %s\n", path);
                 continue;
             }
+
 			//Allocate a FileInfo, fill it and add it to the array
 			tmp = (FileInfo *)malloc(sizeof(FileInfo));
 			tmp->filename = ep->d_name;
@@ -97,6 +98,24 @@ serialize_files(char *buffer) {
 }
 
 
+FileInfo*
+file_system_get(char *filename) {
+	int i;
+	FileInfo* aux;
+
+	aux = NULL;
+	i = 0;
+	while(i < size) {
+		aux = files_table[i];
+		if (strncmp(aux->filename, filename, strlen(aux->filename)) == 0) {
+			break;
+		}
+		i++;
+	}
+	return aux;
+}
+
+
 void
 print(int size) {
 	int j = 0;
@@ -113,6 +132,8 @@ print(int size) {
 void
 filesystem_load(const char *dir_name) {
 	_list_dir(dir_name, &size);
+	fprintf(stderr,"Archivos a compartir:\n");
+	print(size);
 }
 
 

@@ -14,6 +14,7 @@ void filesystem_load(const char *dir_name);
 void _list_dir(const char *dir_name, int *size);
 void serialize_files(char *buffer);
 void print(int size);
+FileInfo* file_system_get(char* filename);
 
 
 #endif /* FILE_SYSTEM_H_ */

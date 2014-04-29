@@ -156,8 +156,8 @@ main(int argc, char** argv) {
     	fprintf(stderr, "[!] Error iniciando los manejadores de signals.\n");
     	return EXIT_FAILURE;
     }
-    //directory = CONFIG_DEFAULT_SERVER_DIR;
-    //filesystem_load(directory)
+    const char* directory = CONFIG_DEFAULT_SERVER_DIR;
+    filesystem_load(directory);
 
     server.name = "IW Test Server";
     server.status = SERVER_STATUS_INACTIVE;
