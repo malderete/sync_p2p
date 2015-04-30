@@ -117,7 +117,7 @@ file_system_get(char *filename) {
 
 
 void
-print(int size) {
+_filesystem_print(int size) {
 	int j = 0;
 	for(j=0; j < size; j++) {
 		printf("%s:%u\n", files_table[j]->filename, (unsigned)files_table[j]->bytes);
@@ -132,8 +132,8 @@ print(int size) {
 void
 filesystem_load(const char *dir_name) {
 	_list_dir(dir_name, &size);
-	fprintf(stderr,"Archivos a compartir:\n");
-	print(size);
+	fprintf(stderr,"-=[Archivos a compartir]=-\n");
+	_filesystem_print(size);
 }
 
 

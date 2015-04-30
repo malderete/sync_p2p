@@ -41,6 +41,15 @@ void handle_message(int sd, uint16_t message_code, char * message) {
             // Escribimos en el pipe el IP y la lista de archivos del cliente
             // separados por @. Ejemplo: 192.168.1.102@file1;file2;file3;...;fileN;
 
+            //Mejor implementacion
+            // char * big_buffer = malloc(sizeof(unsigned int) + sizeof(ses->ip) + 1 + sizeof(message));
+            // ejemplo de mensaje
+            //   40192.168.1.12@text.txt,example.py,dns.c
+            // ip = '192.168.1.12'
+            // msg = 'text.txt,example.py,dns.c'
+            // size = 2 + 12 + 1 + 25 = 40 este valor le dice al otro lado del pipe cuando alocar ;)
+            //sprintf(big_buffer, "%u%s@%s", size, ses->ip,  message);
+
             sprintf(big_buffer, "%s@%s", ses->ip,  message);
             write(pipe_fds[1], big_buffer, strlen(big_buffer));
             free(big_buffer);
@@ -51,6 +60,14 @@ void handle_message(int sd, uint16_t message_code, char * message) {
             break;
         case FILE_SEGMENT:
             printf("El cliente %d solicita un segmento de un archivo\n", sd);
+            FileInfo* file_i;
+            file_i = NULL;
+            file_i = file_system_get(message);
+            char data[4096]; //4K
+
+            memcpy(data, file_i->content + ses->offset, 4096);
+            printf("Enviando a %d: %s\n", ses->fd, data);
+            send(ses->fd, data, sizeof(data), 0);
             break;
         case BYE:
             printf("El cliente %d se desea desconectar\n", sd);
@@ -59,7 +76,6 @@ void handle_message(int sd, uint16_t message_code, char * message) {
         case EXIST_FILE: //Este es un mensaje que no se si tendremos...
                         // La info la podemos mandar en REQUEST_FILE
             printf("El cliente %d solicita info de un archivo\n", sd);
-            FileInfo* file_i;
             file_i = NULL;
             file_i = file_system_get(message);
             printf("Path: %s size: %d\n", file_i->abs_path, file_i->bytes);
@@ -93,7 +109,7 @@ int server_init_stack(void) {
     char remoteIP[INET6_ADDRSTRLEN];
 
     int yes = 1;        // for setsockopt() SO_REUSEADDR, below
-    int i, rv;
+    int who, rv;
 
     struct addrinfo hints, *ai, *p;
 
@@ -115,23 +131,23 @@ int server_init_stack(void) {
     hints.ai_flags = AI_PASSIVE; // Queremos poder hacer bind()
     // Hacemos la consulta
     if ((rv = getaddrinfo(NULL, PORT, &hints, &ai)) != 0) {
-	    fprintf(stderr, "Server: %s\n", gai_strerror(rv));
-	    exit(1);
+        fprintf(stderr, "Server: %s\n", gai_strerror(rv));
+        exit(1);
     }
 
     for(p=ai; p != NULL; p=p->ai_next) {
-    	listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-	    if (listener < 0) {
-	        continue;
-	    }
-	    // Reutilizamos para evitar el "address already in use"
-	    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-	    if (bind(listener, p->ai_addr, p->ai_addrlen) < 0) {
-	        close(listener);
-	        continue;
-	    }
+        listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (listener < 0) {
+            continue;
+        }
+        // Reutilizamos para evitar el "address already in use"
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+        if (bind(listener, p->ai_addr, p->ai_addrlen) < 0) {
+            close(listener);
+            continue;
+        }
         // Pudimos hacer bind() entonces salgamos del loop!!!
-	    break;
+        break;
     }
     // No deberiamos estar aca (p == NULL) =(
     if (p == NULL) {
@@ -163,17 +179,17 @@ int server_init_stack(void) {
         }
 
         // Recorremos las conexiones y buscamos los datos para leer
-        for(i = 0; i <= fdmax; i++) {
+        for(who=0; who <= fdmax; who++) {
             // Algo que leer =D!
-            if (FD_ISSET(i, &read_fds)) {
+            if (FD_ISSET(who, &read_fds)) {
                 // Un FD es el server tenemos nuevas conexiones
-                if (i == listener) {
+                if (who == listener) {
                     addrlen = sizeof(client);
-				    newfd = accept(listener,
-					    (struct sockaddr *)&client,
-					    &addrlen);
+                    newfd = accept(listener,
+                            (struct sockaddr *)&client,
+                            &addrlen);
 
-				    if (newfd == -1) {
+                    if (newfd == -1) {
                         perror("accept");
                     } else {
                         // Agregamos el newfd al conjunto 'master'
@@ -181,37 +197,38 @@ int server_init_stack(void) {
                         FD_SET(newfd, &master);
                         if (newfd > fdmax) {
                             fdmax = newfd;
+                            printf("maximo actual: %d\n", fdmax);
                         }
                         printf("Server: Nueva conexion desde %s en "
                             "socket %d\n",
-						    inet_ntop(client.ss_family,
-							    &(((struct sockaddr_in*)&client)->sin_addr),
-							    remoteIP, INET_ADDRSTRLEN),
-						    newfd);
-						 s = create_session();
-						 s->fd = newfd;
-						 s->ip = remoteIP;
-						 sessions = add_session(sessions, s);
+                            inet_ntop(client.ss_family,
+                                &(((struct sockaddr_in*)&client)->sin_addr),
+                                remoteIP, INET_ADDRSTRLEN),
+                                newfd);
+                        s = create_session();
+                        s->fd = newfd;
+                        s->ip = remoteIP;
+                        sessions = add_session(sessions, s);
                     }
                 } else { // Algun cliente tiene datos...
-                     nbytes = read_message(i, &message_code, message_buffer);
+                     nbytes = read_message(who, &message_code, message_buffer);
                      // Verificamos posibles errores
                      if (nbytes <= 0) {
                        // Error o un cliente que hizo close()
                         if (nbytes == 0) {
-                            printf("Server: socket %d se desconecto\n", i);
+                            printf("Server: socket %d se desconecto\n", who);
                             // Eliminamos la session
-                            sessions = remove_session(sessions, i);
+                            sessions = remove_session(sessions, who);
                         } else {
                             printf("Problemas no esperados =(...!");
                             perror("recv");
                         }
                         // cerramos el fd y lo eliminamos del conjunto 'master'
-                        close(i);
-                        FD_CLR(i, &master);
+                        close(who);
+                        FD_CLR(who, &master);
                      } else { // Tenemos un mensaje del cliente
                         // Llamamos al manejador de mensajes xD
-                        handle_message(i, message_code, message_buffer);
+                        handle_message(who, message_code, message_buffer);
                     }
                 }
             }

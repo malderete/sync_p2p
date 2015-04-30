@@ -18,7 +18,7 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 int
 tasks_initialize() {
 	int i;
-    //Set the limit of session allowed!
+    //Set the limit of tasks allowed!
     tasks = calloc(max_tasks, sizeof(Task *));
 
     if(tasks == NULL) {

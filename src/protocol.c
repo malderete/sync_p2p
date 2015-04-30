@@ -39,7 +39,15 @@ int read_n_bytes(int sd, void *buffer, int n) {
 */
 int read_message(int sd, uint16_t * code, char *message) {
     int n;
-    uint16_t lon, message_code;
+    uint16_t lon, message_code, one_byte;
+
+    // Vemos si en el buffer del SO hay algo disponible
+    // sin bloquear (MSG_DONTWAIT) pero no sacamos nada del buffer
+    // (MSG_PEEK)
+    n = recv(sd, &one_byte, 1, MSG_DONTWAIT | MSG_PEEK);
+    if (n == 0) {
+        return 0;
+    }
 
     n = -1; // Algo que indica que no leimos...
     n = read_n_bytes(sd, &message_code, HEADER_CODE_LENGTH);

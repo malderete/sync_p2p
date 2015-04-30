@@ -39,31 +39,37 @@ void downloader_worker_thread(void *worker_data) {
 *
 */
 void client_broadcast_nodes() {
-    int sd_node, node_size, i;
+    int sd_known_node, sockadd_size, i;
     //uint16_t code;
-    struct sockaddr_in node;
+    struct sockaddr_in sockadd;
+    KnownNode* known_node_to_check;
 
-    // Seteamos el puerto y la familia igual para
-    // todos los nodos
-    node_size = sizeof(node);
-    node.sin_family = AF_INET;
-    node.sin_port = htons(CLIENT_PORT); //main.h
+    // Configuro un sockadd_in para intentar conectarnos
+    // todos los nodos tienen la misma familia
+    sockadd_size = sizeof(sockadd);
+    sockadd.sin_family = AF_INET;
 
     //code = REQUEST_LIST;
-    printf("Buscando nodos ACTIVOS...\n");
-    for(i=0; i < 3; i++) {
-        sd_node = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-        // Seteo la ip del otro nodo
-    	node.sin_addr.s_addr = inet_addr(server.known_clients[i]);
-    	//Intentamos conectarnos para ver si esta vivo!
-        if (connect(sd_node, (struct sockaddr*)&node, node_size) >= 0) {
-            printf("nodo ACTIVO: %s Intercambiando lista de archivos\n", server.known_clients[i]);
-            server.actives_clients[i] = 1;
+    printf("Escaneando nodos conocidos...\n");
+    for(i=0; i < server.known_nodes_length; i++) {
+        sd_known_node = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+        // Tomo el KnownNode
+        known_node_to_check = server.known_nodes[i];
+        // Seteo la ip del KnownNode en el sockadd_in
+        sockadd.sin_addr.s_addr = inet_addr(known_node_to_check->ip);
+        // Seteo el port del KnownNode en el sockadd_in
+        sockadd.sin_port = htons(known_node_to_check->port);
+
+        //Intentamos conectarnos para ver si esta vivo!
+        if (connect(sd_known_node, (struct sockaddr*)&sockadd, sockadd_size) >= 0) {
+            printf("IP=%s port=%u (nodo ACTIVO), Intercambiando lista de archivos\n", known_node_to_check->ip, known_node_to_check->port);
+            // marco el KnownNode como ACTIVO, envio y desconecto
+            known_node_to_check->status = KNOWN_NODE_ACTIVE;
             //send_message(sd_node, code, "hola;chau;");
-            // Desconecto
-            close(sd_node);
+            close(sd_known_node);
         } else {
-            printf("nodo INACTIVO: %s\n", server.known_clients[i]);
+            printf("IP=%s port=%u (nodo INACTIVO)\n", known_node_to_check->ip, known_node_to_check->port);
         }
     }
 }
@@ -89,23 +95,22 @@ void downloader_init_stack(void) {
         read(pipe_fds[0], pipe_buf, PIPE_SIZE);
         fprintf(stderr, "HIJO Leido %s (%lu bytes)\n", pipe_buf, strlen(pipe_buf));
         if (strncmp(pipe_buf, STOP_MESSAGE, 3) == 0) {
-        	done = 1;
-        	printf("%s\n", "HIJO Terminando...");
+            done = 1;
         } else {
-        	task_parse_list_message(pipe_buf);
-        	// Emitir una SIGNAL (pthread_cond_broadcast(mutex, cond))
-        	// para despertar los workers
+            task_parse_list_message(pipe_buf);
+            // Emitir una SIGNAL (pthread_cond_broadcast(mutex, cond))
+            // para despertar los workers
         }
-
     }
+    printf("%s\n", "HIJO Terminando...");
     //DEBUG
 /*
     Task* t = task_get();
     while(t != NULL) {
-    	printf("IP: %s\n", t->ip);
-    	printf("Filename: %s\n", t->filename);
-    	printf("Total: %d\n\n", t->total);
-    	t = task_get();
+        printf("IP: %s\n", t->ip);
+        printf("Filename: %s\n", t->filename);
+        printf("Total: %d\n\n", t->total);
+        t = task_get();
     }
 */
     exit(0);
