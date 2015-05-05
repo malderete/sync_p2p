@@ -65,9 +65,9 @@ void downloader_download(Task *task) {
     connect(sd, (struct sockaddr*)&sockadd, sizeof(sockadd));
 
 
-    file_path = (char *)malloc(6 + strlen(task->filename));
+    file_path = (char *)malloc(9 + strlen(task->filename));
     // HACK!! Descargamos al /tmp/
-    sprintf(file_path, "%s%s", "/tmp/", task->filename);
+    sprintf(file_path, "%s%s", "/tmp/a/", task->filename);
 
     file = fopen(file_path, "w");
 
@@ -81,7 +81,7 @@ void downloader_download(Task *task) {
     printf("Finished download: filename: %s\n", task->filename);
     fclose(file);
     crc_md5sum_wrapper(file_path, &local_crc_sum);
-    // pedioms el CRC al server
+    // pedimos el CRC al server
     protocol_send_message(sd, REQUEST_CRC, task->filename, strlen(task->filename));
     // calculamos el CRC local
     nbytes = protocol_read_message(sd, &code, payload);

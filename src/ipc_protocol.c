@@ -12,7 +12,6 @@ int ipc_send_message(int fd, char *message) {
     int nbytes;
     short size;
     char *msg;
-    char placeholder[] = "@";
 
     msg = (char*)malloc(strlen(message) + sizeof(size));
     size = sizeof(char) + strlen(message);
