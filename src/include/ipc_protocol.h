@@ -9,9 +9,10 @@
 *  ******************************
 *
 */
-
 // Protocolo Header
 #define IPC_HEADER_SIZE_LENGTH 2 // porque usamos uint16_t
+// Mensage de terminar
+#define IPC_STOP_MESSAGE "SHUTDOWN"
 
 
 int ipc_read_message(int sd, char **message);

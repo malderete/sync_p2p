@@ -8,7 +8,6 @@
 #include <netdb.h>
 
 #include "include/crc.h"
-#include "include/main.h"
 #include "include/file_system.h"
 #include "include/server.h"
 #include "include/ipc_protocol.h"
@@ -21,17 +20,33 @@ extern SessionList* sessions;
 extern int pipe_fds[2];
 
 
-int server_set_node_as_active(Session *session) {
+int server_get_port_for_active_node(char *ip) {
+    int i, port;
+    KnownNode *known_node;
+
+    port = -1;
+    for(i=0; i < server.known_nodes_length; i++) {
+        known_node = server.known_nodes[i];
+        if ((known_node->status == KNOWN_NODE_ACTIVE) && (strncmp(known_node->ip, ip, strlen(known_node->ip)) == 0)) {
+            port = known_node->port;
+            break;
+        }
+    }
+    return port;
+}
+
+
+int server_set_node_as_active(char *ip) {
     KnownNode *known_node;
     int i, done;
 
     done = 0;
     for(i=0; i < server.known_nodes_length; i++) {
         known_node = server.known_nodes[i];
-        if ((known_node->status == KNOWN_NODE_INACTIVE) && (strncmp(known_node->ip, session->ip, strlen(known_node->ip)) == 0)) {
+        if ((known_node->status == KNOWN_NODE_INACTIVE) && (strncmp(known_node->ip,ip, strlen(known_node->ip)) == 0)) {
             server.known_nodes[i]->status = KNOWN_NODE_ACTIVE;
             done = 1;
-            printf("Marcando como activo: %s\n", server.known_nodes[i]->ip);
+            break;
         }
     }
     return done;
@@ -49,7 +64,7 @@ int server_send_file_info(Session *session, char *filename) {
     file_info = file_system_get(filename);
     if (file_info) {
         nbytes = crc_md5sum_wrapper(file_info->abs_path, &crc_sum);
-        printf("Server CRC: %s (%d bytes)\n", crc_sum, nbytes);
+        //printf("Server CRC: %s (%d bytes)\n", crc_sum, nbytes);
         nbytes = protocol_send_message(session->fd, REQUEST_CRC, crc_sum, nbytes);
     }
     return nbytes;
@@ -105,13 +120,9 @@ void handle_message(int sd, uint16_t message_code, char *message) {
     switch (message_code) {
         case REQUEST_LIST:
             // Nos aseguramos que el nodo este activo para nosotros
-            server_set_node_as_active(ses);
+            server_set_node_as_active(ses->ip);
             printf("El cliente %d solicita la lista de archivos\n", sd);
             ipc_buffer = (char *)malloc(strlen(ses->ip) + strlen(message) + sizeof(char)*2);
-            // IP@ListaDeArchivos (192.168.1.125@archivo1:54;archivo2:152;)
-            //memcpy(ipc_buffer, ses->ip, strlen(ses->ip));
-            //memcpy(ipc_buffer + strlen(ses->ip), "@", sizeof(char));
-            //memcpy(ipc_buffer + strlen(ses->ip) + sizeof(char), message, strlen(message));
             sprintf(ipc_buffer, "%s@%s", ses->ip, message);
 
             ipc_send_message(pipe_fds[1], ipc_buffer);
@@ -142,17 +153,19 @@ int server_init_stack(void) {
     fd_set read_fds;
     int fdmax;
 
-    int listener;     // Server fd
-    int newfd;        // fd de cada cliente aceptado
-    struct sockaddr_storage client; // client address
+    // sd del server
+    int listener;
+    // sd de cada cliente aceptado
+    int newfd;
+    // direccion de cada client
+    struct sockaddr_storage client;
     socklen_t addrlen;
 
-    //char buf[MAX_SIZE];    // buffer for client data
     int nbytes;
-
     char remoteIP[INET6_ADDRSTRLEN];
 
-    int yes = 1;        // for setsockopt() SO_REUSEADDR, below
+    //setsockopt() SO_REUSEADDR
+    int yes = 1;
     int who, rv;
 
     struct addrinfo hints, *ai, *p;
@@ -161,19 +174,19 @@ int server_init_stack(void) {
     uint16_t message_code;
     char message_buffer[MAX_SIZE];
 
-    // Iniciamos los conjuntos en vacios...
+    // Iniciamos los conjuntos en vacios
     FD_ZERO(&master);
     FD_ZERO(&read_fds);
 
     // Session
     Session *s;
 
-    // Tomamos un socket para hacer bind() y listen()...
+    // Tomamos un socket para hacer bind() y listen()
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC; // No importa la familiar IPv4 o IPv6
-    //hints.ai_family = AF_INET; // IPv4
+    hints.ai_family = AF_INET; // IPv4
     hints.ai_socktype = SOCK_STREAM; // un socket de STREAM
     hints.ai_flags = AI_PASSIVE; // Queremos poder hacer bind()
+
     // Hacemos la consulta
     if ((rv = getaddrinfo(NULL, server.server_port, &hints, &ai)) != 0) {
         fprintf(stderr, "Server: %s\n", gai_strerror(rv));
@@ -213,7 +226,7 @@ int server_init_stack(void) {
     // el maximo FD es listener...(por ahora)
     fdmax = listener;
 
-    for(;;) {
+    while(server.status == SERVER_STATUS_ACTIVE) {
         // copiamos 'master' y esperamos que algo suceda :P
         read_fds = master;
         // Si queremos timeout debemos reemplazar el ultimo NULL
@@ -278,5 +291,8 @@ int server_init_stack(void) {
             }
         }
     }
+    printf("[*] Finalizando servidor: %s\n", server.name);
+    // No permitimos ni enviar ni recibir!
+    shutdown(listener, SHUT_RDWR);
     return 0;
 }

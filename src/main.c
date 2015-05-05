@@ -13,7 +13,7 @@
 #include "include/client.h"
 #include "include/dns.h"
 #include "include/file_system.h"
-#include "include/main.h"
+#include "include/ipc_protocol.h"
 #include "include/server.h"
 #include "include/sessions.h"
 #include "include/signals.h"
@@ -28,7 +28,7 @@
 
 // FD del pipe
 // Leer de pipe_fds[0]
-// escribir de pipe_fds[1]
+// Escribir en pipe_fds[1]
 int pipe_fds[2];
 
 
@@ -95,6 +95,15 @@ config_load(char* config_filename) {
     char* final_ip;
     json_t *json;
 
+    json = json_object_get(main_json, "name");
+    if (!json_is_string(json)) {
+        printf("error: 'name' no es un string\n");
+        json_decref(json);
+        return 1;
+    }
+    // Seteamos el name de nuestro server
+    server.name = strdup(json_string_value(json));
+
     json = json_object_get(main_json, "port");
     if (!json_is_string(json)) {
         printf("error: 'port' no es un string\n");
@@ -104,6 +113,24 @@ config_load(char* config_filename) {
     // Seteamos el puerto donde escuchara el servidor
     server.server_port = strdup(json_string_value(json));
 
+    json = json_object_get(main_json, "share_dir");
+    if (!json_is_string(json)) {
+        printf("error: 'share_dir' no es un string\n");
+        json_decref(json);
+        return 1;
+    }
+    // Seteamos el directorio compatido
+    server.share_directory = strdup(json_string_value(json));
+
+
+    json = json_object_get(main_json, "download_dir");
+    if (!json_is_string(json)) {
+        printf("error: 'download_dir' no es un string\n");
+        json_decref(json);
+        return 1;
+    }
+    // Seteamos el directorio donde descargar
+    server.download_directory = strdup(json_string_value(json));
 
     json = json_object_get(main_json, "nodes");
     if (!json_is_array(json)) {
@@ -179,19 +206,28 @@ main(int argc, char** argv) {
         fprintf(stderr, "[!] Error parseando argumentos.\n");
         return EXIT_FAILURE;
     }
-    //config_filename = CONFIG_FILE_PATH;
     if (config_load(config_filename) == 1) {
         fprintf(stderr, "[!] Error parseando archivo de configuracion.\n");
         return EXIT_FAILURE;
     }
-    if (signals_initialize() == -1) {
-        fprintf(stderr, "[!] Error iniciando los manejadores de signals.\n");
+    // Hacemos que el CHILD no maneje KILL ;)
+    if (signals_disable() == -1) {
+        fprintf(stderr, "[!] Error desabilitando los manejadores de signals.\n");
         return EXIT_FAILURE;
     }
-    const char* directory = CONFIG_DEFAULT_SERVER_DIR;
-    filesystem_load(directory);
+    printf(
+            "[*] Configuracion utilizada:\n"
+            "    Server name: %s\n"
+            "    Server port: %s\n"
+            "    Share dir: %s\n"
+            "    Download dir: %s\n\n",
+            server.name, server.server_port,
+            server.share_directory, server.download_directory
+    );
+    //const char* directory = CONFIG_DEFAULT_SERVER_DIR;
+    //filesystem_load(directory);
+    filesystem_load(server.share_directory);
 
-    server.name = "IW Test Server";
     server.status = SERVER_STATUS_INACTIVE;
 
     pid = fork();
@@ -202,21 +238,26 @@ main(int argc, char** argv) {
 
     // El Parent es un server single-thread que atiende clientes
     // El Child es un proceso que planifica threads con las descargas
-    // Para comunicar los dos usamos un pipe.
+    // Para comunicar los dos usamos un pipe unidireccional (server -> client)
 
     if (pid == 0) { //CHILD
          printf(
-                 "[*] HIJO Creado, iniciando cliente (PID=%d)\n:"
+                 "[*] HIJO Creado, iniciando cliente (PID=%d):\n"
                  " Esperando datos en el PIPE...\n", getpid()
         );
          // Cerramos el fd del pipe para escribir
          close(pipe_fds[1]);
          downloader_init_stack();
     } else { //PARENT
+        if (signals_initialize() == -1) {
+            fprintf(stderr, "[!] Error iniciando los manejadores de signals.\n");
+            ipc_send_message(pipe_fds[1], IPC_STOP_MESSAGE);
+            return EXIT_FAILURE;
+        }
         printf("[*] Iniciando server(PID=%d)\n", getpid());
         if (server_init_stack() == -1) {
             fprintf(stderr, "[!] Problemas al iniciar el servidor\n");
-            //TODO: Avisar al hijo que algo salio mal(?)
+            ipc_send_message(pipe_fds[1], IPC_STOP_MESSAGE);
         }
         // Antes de salir esperamos al otro hijo!
         waitpid(pid, NULL, 0);

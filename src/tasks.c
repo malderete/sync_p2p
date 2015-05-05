@@ -40,7 +40,7 @@ task_size() {
 int
 task_add(Task* task) {
 	int i;
-	fprintf(stderr, "task_add()\n");
+	//fprintf(stderr, "task_add()\n");
 	pthread_mutex_lock(&mutex);
 	for(i=0; i < max_tasks; i++) {
 		if (tasks[i] == NULL) {
@@ -50,7 +50,7 @@ task_add(Task* task) {
 			break;
 		}
 	}
-	fprintf(stderr, "Saliendo: task_add()\n");
+	//fprintf(stderr, "Saliendo: task_add()\n");
     return 0;
 }
 
@@ -59,7 +59,7 @@ Task *
 task_get() {
 	Task* task_aux;
 	int i;
-	fprintf(stderr, "task_get()\n");
+	//fprintf(stderr, "task_get()\n");
 	pthread_mutex_lock(&mutex);
 	task_aux = NULL;
 	for(i=0; i < max_tasks; i++) {
@@ -71,7 +71,7 @@ task_get() {
 			break;
 		}
 	}
-	fprintf(stderr, "Saliendo: task_get()\n");
+	//fprintf(stderr, "Saliendo: task_get()\n");
 	return task_aux;
 
 }
@@ -82,7 +82,7 @@ task_parse_file_info(char* str_from, Task* task) {
     char* aux_s;
     char* str_size;
 
-    fprintf(stderr, "task_parse_file_info(%s)\n", str_from);
+    //fprintf(stderr, "task_parse_file_info(%s)\n", str_from);
     // allocate space for an int
     str_size = (char*)malloc(sizeof(int));
 
@@ -93,16 +93,16 @@ task_parse_file_info(char* str_from, Task* task) {
     }
 
     memccpy(task->filename, aux_s, ':', sizeof(task->filename));
-    fprintf(stderr, "Fuera 1\n");
+    //fprintf(stderr, "Fuera 1\n");
     task->filename[pos] = '\0';
-    fprintf(stderr, "Fuera 2\n");
+    //fprintf(stderr, "Fuera 2\n");
 
     aux_s = index(str_from, ':') + 1;
     memcpy(str_size, aux_s, strlen(aux_s));
     str_size[strlen(aux_s)] = '\0';
     task->total = atoi(str_size);
 
-    fprintf(stderr, "Saliendo: task_parse_file_info()\n");
+    //fprintf(stderr, "Saliendo: task_parse_file_info()\n");
 }
 
 
@@ -132,5 +132,5 @@ task_parse_list_message(char *message) {
 
 		ptr = strtok(NULL, ";");
 	}
-	fprintf(stderr, "Saliendo: task_parse_list_message()\n");
+	//fprintf(stderr, "Saliendo: task_parse_list_message()\n");
 }

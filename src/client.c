@@ -10,7 +10,6 @@
 
 #include "include/crc.h"
 #include "include/file_system.h"
-#include "include/main.h"
 #include "include/server.h"
 #include "include/ipc_protocol.h"
 #include "include/protocol.h"
@@ -27,23 +26,6 @@ pthread_cond_t can_consume;
 pthread_cond_t can_produce;
 
 
-int get_port_for_ip(char ip[16]) {
-    int i, port;
-    KnownNode *known_node;
-
-    port = -1;
-    for(i=0; i < server.known_nodes_length; i++) {
-        known_node = server.known_nodes[i];
-        printf("%d %s %s %d\n", known_node->status, known_node->ip, ip, strncmp(known_node->ip, ip, strlen(known_node->ip)));
-        if ((known_node->status == KNOWN_NODE_ACTIVE) && (strncmp(known_node->ip, ip, strlen(known_node->ip)) == 0)) {
-            port = known_node->port;
-            break;
-        }
-    }
-    return port;
-}
-
-
 /*
  * Realiza la descarga y guarda el archivo en el FS
  */
@@ -57,7 +39,7 @@ void downloader_download(Task *task) {
     FILE *file;
 
     code = 0 ;
-    port = get_port_for_ip(task->ip);
+    port = server_get_port_for_active_node(task->ip);
     sockadd.sin_family = AF_INET;
     sockadd.sin_addr.s_addr = inet_addr(task->ip);
     sockadd.sin_port = htons(port);
@@ -65,30 +47,35 @@ void downloader_download(Task *task) {
     connect(sd, (struct sockaddr*)&sockadd, sizeof(sockadd));
 
 
-    file_path = (char *)malloc(9 + strlen(task->filename));
-    // HACK!! Descargamos al /tmp/
-    sprintf(file_path, "%s%s", "/tmp/a/", task->filename);
+    file_path = (char *)malloc(strlen(server.download_directory) + strlen(task->filename) + sizeof(char)*2);
+    sprintf(file_path, "%s%s", server.download_directory, task->filename);
 
     file = fopen(file_path, "w");
 
-    printf("Started download: filename: %s (%s) from %s:%d\n", task->filename, file_path, task->ip, port);
-
+    printf("[*] Comenzando descarga %s (%s) de %s:%d\n", task->filename, file_path, task->ip, port);
     while (code != LAST_FILE_SEGMENT) {
         protocol_send_message(sd, FILE_SEGMENT, task->filename, strlen(task->filename));
         nbytes = protocol_read_message(sd, &code, payload);
         fwrite(payload, sizeof(char), nbytes, file);
     }
-    printf("Finished download: filename: %s\n", task->filename);
     fclose(file);
+    // calculamos el CRC local
     crc_md5sum_wrapper(file_path, &local_crc_sum);
     // pedimos el CRC al server
     protocol_send_message(sd, REQUEST_CRC, task->filename, strlen(task->filename));
-    // calculamos el CRC local
     nbytes = protocol_read_message(sd, &code, payload);
+
+
     if (strncmp(payload, local_crc_sum, nbytes) == 0) {
-        printf("Descarga valida los CRC son iguales %s\n", local_crc_sum);
+        printf("[*] Descarga valida %s el CRC %s es correcto\n", file_path, local_crc_sum);
     } else {
-        printf("Descarga invalida los CRC no son iguales %s != %s\n", local_crc_sum, payload);
+        //TODO: Una mejora seria retransmitir el archivo!
+        printf("[!] Descarga invalida eliminando %s el CRC %s no concuerda con %s\n",
+                file_path, local_crc_sum, payload
+        );
+        if (unlink(file_path) != 0) {
+            printf("[!] Error al eliminar archivo invalido: %s\n", file_path);
+        }
     }
 }
 
@@ -110,7 +97,7 @@ void *downloader_worker_thread(void *worker_data) {
             if (finish_downloading) {
                 break;
             }
-            printf("Waiting condition can_consume: thread %ld\n", my_id);
+            printf("[*] Esperando condicion can_consume: thread %ld\n", my_id);
             pthread_cond_wait(&can_consume, &task_mutex);
         }
         if (finish_downloading) {
@@ -123,7 +110,7 @@ void *downloader_worker_thread(void *worker_data) {
         pthread_mutex_lock(&task_mutex);  //(?)
     }
     pthread_mutex_unlock(&task_mutex); //(?)
-    printf("Exiting downloader_worker_thread: %ld\n", my_id);
+    printf("[*] Saliendo de downloader_worker_thread: %ld\n", my_id);
     pthread_exit(NULL);
 }
 
@@ -150,7 +137,7 @@ void client_broadcast_nodes() {
     code = REQUEST_LIST;
     files_list_buffer = (char *)malloc(1024);
     serialize_files(files_list_buffer);
-    printf("Escaneando nodos conocidos...\n");
+    printf("[*] Buscando nodos conocidos...\n");
     for(i=0; i < server.known_nodes_length; i++) {
         sd_known_node = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 
@@ -163,13 +150,13 @@ void client_broadcast_nodes() {
 
         //Intentamos conectarnos para ver si esta vivo!
         if (connect(sd_known_node, (struct sockaddr*)&sockadd, sockadd_size) >= 0) {
-            printf("IP=%s port=%u (nodo ACTIVO), Intercambiando lista de archivos\n", known_node_to_check->ip, known_node_to_check->port);
+            printf("[*] IP=%s Port=%u (nodo ACTIVO), Intercambiando lista de archivos\n", known_node_to_check->ip, known_node_to_check->port);
             // marco el KnownNode como ACTIVO, envio y desconecto
             known_node_to_check->status = KNOWN_NODE_ACTIVE;
             protocol_send_message(sd_known_node, code, files_list_buffer, strlen(files_list_buffer));
             close(sd_known_node);
         } else {
-            printf("IP=%s port=%u (nodo INACTIVO)\n", known_node_to_check->ip, known_node_to_check->port);
+            printf("[*] IP=%s port=%u (nodo INACTIVO)\n", known_node_to_check->ip, known_node_to_check->port);
         }
     }
 }
@@ -181,6 +168,8 @@ void client_broadcast_nodes() {
 */
 void downloader_init_stack(void) {
     char *ipc_buffer;
+    char *ipc_buffer_cpy;
+    char *node_ip;
     int done;
     long t0, t1;
     pthread_t threads[2];
@@ -204,20 +193,27 @@ void downloader_init_stack(void) {
 
     done = 0;
     finish_downloading = 0;
-    printf("Downloader Scheduler esperando datos...\n");
+    printf("[*] Downloader Scheduler esperando datos\n");
     while(!done) {
+        ipc_buffer = NULL;
         ipc_read_message(pipe_fds[0], &ipc_buffer);
-        fprintf(stderr, "HIJO Leido %s (%lu bytes)\n", ipc_buffer, strlen(ipc_buffer));
-        if (strncmp(ipc_buffer, STOP_MESSAGE, strlen(STOP_MESSAGE)) == 0) {
-            printf("Leido STOP_MESSAGE\n");
+        fprintf(stderr, "[*] HIJO Leido %s (%lu bytes)\n", ipc_buffer, strlen(ipc_buffer));
+        if (strncmp(ipc_buffer, IPC_STOP_MESSAGE, strlen(IPC_STOP_MESSAGE)) == 0) {
+            printf("[*] IPC_STOP_MESSAGE recibido\n");
             done = 1;
             finish_downloading = 1;
             pthread_cond_broadcast(&can_consume);
         } else {
-            task_parse_list_message(ipc_buffer);
-            pthread_cond_broadcast(&can_consume);
+            ipc_buffer_cpy = NULL;
+            ipc_buffer_cpy = strdup(ipc_buffer);
+            node_ip = strtok(ipc_buffer_cpy, "@");
+            if (server_set_node_as_active(node_ip) > 0) {
+                task_parse_list_message(ipc_buffer);
+                pthread_cond_broadcast(&can_consume);
+            } else {
+                printf("[!] Ignorando mensaje IP desconocida/invalida: %s\n", node_ip);
+            }
         }
-        free(ipc_buffer);
     }
     // Esperamos que los threads terminen
     pthread_join(threads[0], NULL);
@@ -237,6 +233,6 @@ void downloader_init_stack(void) {
         //printf("Total: %d\n\n", t->total);
         //t = task_get();
     //}
-    printf("%s\n", "HIJO Terminado");
+    printf("[*] %s\n", "Finalizando Planificador de descargas");
     exit(0);
 }

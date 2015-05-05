@@ -1,8 +1,6 @@
 #ifndef TASKS_H_
 #define TASKS_H_
 #define FILE_SIZE 50
-#define STOP_MESSAGE "SHUTDOWN"
-
 
 typedef struct task_struct Task;
 
