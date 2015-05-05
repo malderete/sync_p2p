@@ -1,0 +1,24 @@
+{
+    "name": "IW Test Server 01",
+    "port": "8888",
+    "share_dir": "/home/tincho/proyectos/iw/",
+    "download_dir": "/home/tincho/Desktop/",
+    "nodes": [
+        {
+            "port": "8080",
+            "ip": "192.168.1.10"
+        },
+        {    
+            "port": "8088",
+            "ip": "192.168.1.11"
+        },
+        {
+            "port": "8000",
+            "ip": "192.168.1.12"
+        },
+        {
+            "ip": "localhost",
+            "port": "8080"
+        }
+    ]
+}
