@@ -17,8 +17,55 @@
 extern Server server;
 extern SessionList* sessions;
 extern int pipe_fds[2];
-//extern Config config;
 
+
+int server_send_file_info(Session *session, char *filename) {
+    FileInfo *file_info;
+    char send_buffer[PAYLOAD_SIZE];
+    int nbytes;
+
+    nbytes = 0;
+    file_info = NULL;
+    file_info = file_system_get(filename);
+    if (file_info) {
+        memcpy(send_buffer, &file_info->bytes, sizeof(file_info->bytes));
+        nbytes = protocol_send_message(session->fd, REQUEST_FILE, send_buffer, strlen(send_buffer));
+    }
+    return nbytes;
+}
+
+
+int server_send_file_segment(Session *session, char *filename) {
+    FileInfo *file_info;
+    char send_buffer[PAYLOAD_SIZE];
+    int nbytes, data_sent_size, protocol_code, message_size;
+
+    nbytes = 0;
+    file_info = NULL;
+    file_info = file_system_get(filename);
+    if (file_info) {
+        if ((file_info->bytes - session->offset) >= PAYLOAD_SIZE) {
+            message_size = PAYLOAD_SIZE;
+        } else {
+            message_size = (file_info->bytes - session->offset);
+        }
+        if ((session->offset + message_size) >= file_info->bytes) {
+            // Si es el ultimo segmente cambiamos el codigo
+            // asi avisamos al cliente que debe hacer close()
+            protocol_code = LAST_FILE_SEGMENT;
+        } else {
+            protocol_code = FILE_SEGMENT;
+        }
+
+        memcpy(send_buffer, file_info->content + session->offset, message_size);
+        nbytes = protocol_send_message(session->fd, protocol_code, send_buffer, message_size);
+        // Bytes enviados sin el header
+        data_sent_size = nbytes - (HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH);
+        // Actualizamos el offset
+        session->offset += data_sent_size;
+    }
+    return nbytes;
+}
 
 
 /*
@@ -27,8 +74,9 @@ extern int pipe_fds[2];
 * Funciona como un dispatcher, es decir, toma una desicion en base
 * al codigo (identificador del mensaje) en nuestro caso
 */
-void handle_message(int sd, uint16_t message_code, char * message) {
-    Session * ses;
+void handle_message(int sd, uint16_t message_code, char *message) {
+    Session *ses;
+
     ses = get_session(sessions, sd);
 
     printf("Cliente IP: %s, Codigo: %u, Mensaje: %s\n", ses->ip, message_code, message);
@@ -52,38 +100,21 @@ void handle_message(int sd, uint16_t message_code, char * message) {
 
             sprintf(big_buffer, "%s@%s", ses->ip,  message);
             write(pipe_fds[1], big_buffer, strlen(big_buffer));
-            free(big_buffer);
             printf("Longitud insertada en pipe: %lu\n", strlen(big_buffer));
+            free(big_buffer);
             break;
         case REQUEST_FILE:
             printf("El cliente %d solicita descargar/info sobre un archivo\n", sd);
+            server_send_file_info(ses, message);
             break;
         case FILE_SEGMENT:
             printf("El cliente %d solicita un segmento de un archivo\n", sd);
-            FileInfo* file_i;
-            file_i = NULL;
-            file_i = file_system_get(message);
-            char data[4096]; //4K
-
-            memcpy(data, file_i->content + ses->offset, 4096);
-            printf("Enviando a %d: %s\n", ses->fd, data);
-            send(ses->fd, data, sizeof(data), 0);
+            server_send_file_segment(ses, message);
             break;
         case BYE:
             printf("El cliente %d se desea desconectar\n", sd);
             write(pipe_fds[1], "FIN", 3);
             break;
-        case EXIST_FILE: //Este es un mensaje que no se si tendremos...
-                        // La info la podemos mandar en REQUEST_FILE
-            printf("El cliente %d solicita info de un archivo\n", sd);
-            file_i = NULL;
-            file_i = file_system_get(message);
-            printf("Path: %s size: %d\n", file_i->abs_path, file_i->bytes);
-            break;
-    }
-    // Por ahora es un 'triste' ACK de prueba...xD
-    if (send(sd, "Gracias", 7, 0) == -1) {
-        perror("send");
     }
 }
 
@@ -211,7 +242,7 @@ int server_init_stack(void) {
                         sessions = add_session(sessions, s);
                     }
                 } else { // Algun cliente tiene datos...
-                     nbytes = read_message(who, &message_code, message_buffer);
+                     nbytes = protocol_read_message(who, &message_code, message_buffer);
                      // Verificamos posibles errores
                      if (nbytes <= 0) {
                        // Error o un cliente que hizo close()

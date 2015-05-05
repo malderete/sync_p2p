@@ -20,13 +20,16 @@
 #define REQUEST_LIST 100
 #define REQUEST_FILE 200
 #define FILE_SEGMENT 300
+#define LAST_FILE_SEGMENT 310
 #define BYE 400
 #define EXIST_FILE 600
+// tamaños utiles
+#define PAYLOAD_SIZE 4096
 
 
 int read_n_bytes(int sd, void *buffer, int n);
-int read_message(int sd, uint16_t * code, char *message);
-int send_message(int sd, uint16_t code, char *message);
+int protocol_read_message(int sd, uint16_t * code, char *message);
+int protocol_send_message(int sd, uint16_t code, char *message, int message_size);
 
 
 

@@ -33,6 +33,11 @@ tasks_initialize() {
 }
 
 int
+task_size() {
+    return (int)current_tasks;
+}
+
+int
 task_add(Task* task) {
 	int i;
 	fprintf(stderr, "task_add()\n");

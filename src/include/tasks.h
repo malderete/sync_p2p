@@ -19,5 +19,6 @@ void task_parse_file_info(char* str_from, Task* task);
 int tasks_initialize();
 int task_add(Task* task);
 Task* task_get();
+int task_size();
 
 #endif /* TASKS_H_ */

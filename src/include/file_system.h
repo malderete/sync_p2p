@@ -4,10 +4,10 @@
 
 typedef struct file_struct FileInfo;
 struct file_struct {
-	char* filename;
-    char* abs_path;
+	char *filename;
+    char *abs_path;
 	int bytes;
-    char* content;
+    void *content;
 };
 
 void filesystem_load(const char *dir_name);
