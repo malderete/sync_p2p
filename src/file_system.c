@@ -15,8 +15,9 @@ static int size;
 
 
 /*
- *  Lists *ONLY* files in a directory,
- *  excluding hidden files and folders.
+ *  Lista *UNICAMENTE* archivos en u directorio,
+ *  excluye archivos ocultos y carpetar.
+
  */
 void
 _list_dir(const char *dir_name, int *size) {
@@ -58,16 +59,16 @@ _list_dir(const char *dir_name, int *size) {
                 continue;
             }
 
-			//Allocate a FileInfo, fill it and add it to the array
+			//alocamos un FileInfo
 			tmp = (FileInfo *)malloc(sizeof(FileInfo));
 			tmp->filename = ep->d_name;
             tmp->abs_path = path;
 			tmp->bytes = file_stat.st_size;
-            //Memory map file
+            //Archivo mapeado en memoria
             fd = open(path, O_RDONLY);
             tmp->content = mmap(0, file_stat.st_size, PROT_READ, MAP_SHARED, fd, 0);
             close(fd);
-            //Add to the array
+            //Agregamos al array
 			files_table[i] = tmp;
 			i++;
 		}
@@ -78,8 +79,8 @@ _list_dir(const char *dir_name, int *size) {
 
 
 /*
- * Serialize the info about the files
- * into buffer.
+ * Serializamos la info acerca de los archivos
+ * en un buffer
  */
 void
 serialize_files(char *buffer) {
@@ -91,7 +92,6 @@ serialize_files(char *buffer) {
 		paddin += size_local;
 		//printf("pad: %i\n", paddin);
 	}
-	//Set the end of string
 	buffer[paddin] = '\0';
 	//printf("BUFFER: %s\n", buffer);
 	//printf("BUFFER: %d\n", strlen(buffer));
@@ -126,14 +126,14 @@ _filesystem_print(int size) {
 
 
 /*
- * Initilize the FS module, loading 
- * the files inside the given directory 
+ * Inicializa el modulo de File System
  */
 void
 filesystem_load(const char *dir_name) {
 	_list_dir(dir_name, &size);
 	fprintf(stderr,"-=[Archivos a compartir]=-\n");
 	_filesystem_print(size);
+	fprintf(stderr,"-=========================-\n");
 }
 
 

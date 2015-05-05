@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#include "include/crc.h"
 #include "include/main.h"
 #include "include/file_system.h"
 #include "include/server.h"
@@ -20,17 +21,36 @@ extern SessionList* sessions;
 extern int pipe_fds[2];
 
 
+int server_set_node_as_active(Session *session) {
+    KnownNode *known_node;
+    int i, done;
+
+    done = 0;
+    for(i=0; i < server.known_nodes_length; i++) {
+        known_node = server.known_nodes[i];
+        if ((known_node->status == KNOWN_NODE_INACTIVE) && (strncmp(known_node->ip, session->ip, strlen(known_node->ip)) == 0)) {
+            server.known_nodes[i]->status = KNOWN_NODE_ACTIVE;
+            done = 1;
+            printf("marcando como activo: %s\n", server.known_nodes[i]->ip);
+        }
+    }
+    return done;
+}
+
+
 int server_send_file_info(Session *session, char *filename) {
     FileInfo *file_info;
-    char send_buffer[PAYLOAD_SIZE];
+    char *crc_sum;
     int nbytes;
 
     nbytes = 0;
     file_info = NULL;
+    crc_sum = NULL;
     file_info = file_system_get(filename);
     if (file_info) {
-        memcpy(send_buffer, &file_info->bytes, sizeof(file_info->bytes));
-        nbytes = protocol_send_message(session->fd, REQUEST_FILE, send_buffer, strlen(send_buffer));
+        nbytes = crc_md5sum_wrapper(file_info->abs_path, &crc_sum);
+        printf("CRC: %s (%d bytes)\n", crc_sum, nbytes);
+        nbytes = protocol_send_message(session->fd, REQUEST_CRC, crc_sum, nbytes);
     }
     return nbytes;
 }
@@ -76,6 +96,7 @@ int server_send_file_segment(Session *session, char *filename) {
 */
 void handle_message(int sd, uint16_t message_code, char *message) {
     Session *ses;
+    int flag, i;
     char *ipc_buffer;
 
     ses = get_session(sessions, sd);
@@ -84,6 +105,15 @@ void handle_message(int sd, uint16_t message_code, char *message) {
     // Se deberia tener una entrada del switch por cada codigo
     switch (message_code) {
         case REQUEST_LIST:
+            // Nos aseguramos que el nodo este activo para nosotros
+            flag = server_set_node_as_active(ses);
+            for(i=0; i < server.known_nodes_length; i++) {
+                printf("Nodo %s activo %d\n", server.known_nodes[i]->ip, server.known_nodes[i]->status);
+            }
+            if (!flag) {
+                printf("No pudimos marcar el nodo como activo");
+                break;
+            }
             printf("El cliente %d solicita la lista de archivos\n", sd);
             ipc_buffer = (char *)malloc(strlen(ses->ip) + strlen(message) + 1);
             // IP@ListaDeArchivos (192.168.1.125@archivo1:54;archivo2:152;)
@@ -94,7 +124,7 @@ void handle_message(int sd, uint16_t message_code, char *message) {
             ipc_send_message(pipe_fds[1], ipc_buffer);
             free(ipc_buffer);
             break;
-        case REQUEST_FILE:
+        case REQUEST_CRC:
             printf("El cliente %d solicita descargar/info sobre un archivo\n", sd);
             server_send_file_info(ses, message);
             break;

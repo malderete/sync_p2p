@@ -7,6 +7,7 @@
 // Extras
 #define BACKLOG 10 // Cuantas conexiones permitimos en la cola de pendientes
 
+int server_set_node_as_active(Session *session);
 int server_send_file_info(Session *session, char *filename);
 int server_send_file_segment(Session *session, char *filename);
 void handle_message(int sd, uint16_t message_code, char * message);

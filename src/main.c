@@ -101,7 +101,7 @@ config_load(char* config_filename) {
         json_decref(json);
         return 1;
     }
-    // Steamos el puerto donde escuchara el servidor
+    // Seteamos el puerto donde escuchara el servidor
     server.server_port = strdup(json_string_value(json));
 
 

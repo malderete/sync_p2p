@@ -8,6 +8,8 @@
 #include <pthread.h>
 
 
+#include "include/crc.h"
+#include "include/file_system.h"
 #include "include/main.h"
 #include "include/server.h"
 #include "include/ipc_protocol.h"
@@ -28,13 +30,14 @@ pthread_cond_t can_produce;
 int get_port_for_ip(char ip[16]) {
     int i, port;
     KnownNode *known_node;
-    return 8888;
+
     port = -1;
     for(i=0; i < server.known_nodes_length; i++) {
         known_node = server.known_nodes[i];
         printf("%d %s %s %d\n", known_node->status, known_node->ip, ip, strncmp(known_node->ip, ip, strlen(known_node->ip)));
-        if ((known_node->status) && (strncmp(known_node->ip, ip, strlen(known_node->ip)) > 0)) {
+        if ((known_node->status == KNOWN_NODE_ACTIVE) && (strncmp(known_node->ip, ip, strlen(known_node->ip)) == 0)) {
             port = known_node->port;
+            break;
         }
     }
     return port;
@@ -50,6 +53,7 @@ void downloader_download(Task *task) {
     uint16_t code;
     char payload[PAYLOAD_SIZE];
     char *file_path;
+    char *local_crc_sum;
     FILE *file;
 
     code = 0 ;
@@ -59,6 +63,7 @@ void downloader_download(Task *task) {
     sockadd.sin_port = htons(port);
     sd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     connect(sd, (struct sockaddr*)&sockadd, sizeof(sockadd));
+
 
     file_path = (char *)malloc(6 + strlen(task->filename));
     // HACK!! Descargamos al /tmp/
@@ -73,9 +78,20 @@ void downloader_download(Task *task) {
         nbytes = protocol_read_message(sd, &code, payload);
         fwrite(payload, sizeof(char), nbytes, file);
     }
-    fclose(file);
     printf("Finished download: filename: %s\n", task->filename);
+    fclose(file);
+    crc_md5sum_wrapper(file_path, &local_crc_sum);
+    // pedioms el CRC al server
+    protocol_send_message(sd, REQUEST_CRC, task->filename, strlen(task->filename));
+    // calculamos el CRC local
+    nbytes = protocol_read_message(sd, &code, payload);
+    if (strncmp(payload, local_crc_sum, nbytes) == 0) {
+        printf("Descarga valida los CRC son iguales %s\n", local_crc_sum);
+    } else {
+        printf("Descarga invalida los CRC no son iguales %s != %s\n", local_crc_sum, payload);
+    }
 }
+
 
 /*
 * Esta funcion representa un thread WORKER
@@ -121,16 +137,19 @@ void *downloader_worker_thread(void *worker_data) {
 */
 void client_broadcast_nodes() {
     int sd_known_node, sockadd_size, i;
-    //uint16_t code;
+    uint16_t code;
     struct sockaddr_in sockadd;
     KnownNode *known_node_to_check;
+    char *files_list_buffer;
 
     // Configuro un sockadd_in para intentar conectarnos
     // todos los nodos tienen la misma familia
     sockadd_size = sizeof(sockadd);
     sockadd.sin_family = AF_INET;
 
-    //code = REQUEST_LIST;
+    code = REQUEST_LIST;
+    files_list_buffer = (char *)malloc(1024);
+    serialize_files(files_list_buffer);
     printf("Escaneando nodos conocidos...\n");
     for(i=0; i < server.known_nodes_length; i++) {
         sd_known_node = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -147,7 +166,7 @@ void client_broadcast_nodes() {
             printf("IP=%s port=%u (nodo ACTIVO), Intercambiando lista de archivos\n", known_node_to_check->ip, known_node_to_check->port);
             // marco el KnownNode como ACTIVO, envio y desconecto
             known_node_to_check->status = KNOWN_NODE_ACTIVE;
-            //send_message(sd_node, code, "hola;chau;");
+            protocol_send_message(sd_known_node, code, files_list_buffer, strlen(files_list_buffer));
             close(sd_known_node);
         } else {
             printf("IP=%s port=%u (nodo INACTIVO)\n", known_node_to_check->ip, known_node_to_check->port);

@@ -18,7 +18,7 @@
 #define HEADER_SIZE_LENGTH 2
 // Codigos
 #define REQUEST_LIST 100
-#define REQUEST_FILE 200
+#define REQUEST_CRC 200
 #define FILE_SEGMENT 300
 #define LAST_FILE_SEGMENT 310
 #define BYE 400
