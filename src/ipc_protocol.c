@@ -7,7 +7,7 @@
 
 #include "include/ipc_protocol.h"
 
-
+/*
 int ipc_send_message(int fd, char *ip, char *files) {
     int nbytes;
     short size;
@@ -23,6 +23,24 @@ int ipc_send_message(int fd, char *ip, char *files) {
     memcpy(msg + sizeof(size) + strlen(ip) + strlen(placeholder), files, strlen(files));
 
     nbytes = write(fd, msg, sizeof(size) + strlen(ip) + strlen(placeholder) + strlen(files));
+
+    return nbytes;
+}*/
+
+int ipc_send_message(int fd, char *message) {
+    int nbytes;
+    short size;
+    char *msg;
+    char placeholder[] = "@";
+
+    msg = (char*)malloc(strlen(message) + sizeof(size));
+    size = sizeof(char) + strlen(message);
+
+    memcpy(msg, &size, sizeof(size));
+    memcpy(msg + sizeof(size), message, strlen(message));
+
+
+    nbytes = write(fd, msg, sizeof(size) + strlen(message));
 
     return nbytes;
 }

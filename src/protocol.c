@@ -67,16 +67,15 @@ int protocol_read_message(int sd, uint16_t * code, char *message) {
 
 /*
 * Enviamos un 'mensaje' de nuestro protocolo
-* Retorna la cantidad de bytes enviados
+* Retorna la cantidad de bytes enviados  en el payload
+* sin tener encuenta el HEADER
 */
 int protocol_send_message(int sd, uint16_t code, char *message, int message_size) {
     int n;
     uint16_t lon;
     uint16_t lon_nbo;
-    char buffer[HEADER_CODE_LENGTH+HEADER_SIZE_LENGTH+MAX_SIZE];
+    char buffer[HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH + MAX_SIZE];
 
-    //lon = strlen(message) + 1;
-    //lon = strlen(message);
     lon = message_size;
     lon_nbo = htons(lon);
 
@@ -88,5 +87,5 @@ int protocol_send_message(int sd, uint16_t code, char *message, int message_size
     // Esto no me convonce, ponerlo en un WHILE!
     n = send(sd, buffer, (HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH + message_size), 0);
 
-    return n;
+    return (n - (HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH));
 }

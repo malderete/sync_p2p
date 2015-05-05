@@ -30,7 +30,6 @@
 // Leer de pipe_fds[0]
 // escribir de pipe_fds[1]
 int pipe_fds[2];
-char pipe_buf[PIPE_SIZE];
 
 
 // VARIABLES GLOBALES!!!
@@ -78,22 +77,40 @@ parse_arguments(int argc, char** argv) {
 
 int
 config_load(char* config_filename) {
-    json_t *json;
+    json_t *main_json;
     json_error_t error;
 
-    json = json_load_file(config_filename, 0, &error);
-    if(!json) {
+    main_json = json_load_file(config_filename, 0, &error);
+    if(!main_json) {
         printf("error: en linea %d: %s\n", error.line, error.text);
         return 1;
     }
-    if(!json_is_array(json)) {
-        printf("error: json no es un array\n");
-        json_decref(json);
+    if(!json_is_object(main_json)) {
+        printf("error: json no es un objeto\n");
+        json_decref(main_json);
         return 1;
     }
 
     int i, size;
     char* final_ip;
+    json_t *json;
+
+    json = json_object_get(main_json, "port");
+    if (!json_is_string(json)) {
+        printf("error: 'port' no es un string\n");
+        json_decref(json);
+        return 1;
+    }
+    // Steamos el puerto donde escuchara el servidor
+    server.server_port = strdup(json_string_value(json));
+
+
+    json = json_object_get(main_json, "nodes");
+    if (!json_is_array(json)) {
+        printf("error: 'nodes' no es un array\n");
+        json_decref(json);
+        return 1;
+    }
     size = json_array_size(json);
 
     // Iniciamos los nodos conocidos por el server
@@ -107,21 +124,21 @@ config_load(char* config_filename) {
 
         data = json_array_get(json, i);
         if(!json_is_object(data)) {
-            printf("error: data %d no es un objeto\n", i + 1);
+            printf("error: 'nodes[%d]' no es un objeto\n", i + 1);
             json_decref(json);
             return 1;
         }
 
         ip = json_object_get(data, "ip");
         if(!json_is_string(ip)) {
-            printf("error: data %d: ip no es un string\n", i + 1);
+            printf("error: 'nodes[%d].ip' no es un string\n", i + 1);
             json_decref(json);
             return 1;
         }
 
         port = json_object_get(data, "port");
         if(!json_is_string(ip)) {
-            printf("error: data %d: port no es un string\n", i + 1);
+            printf("error: 'nodes[%d].port' no es un string\n", i + 1);
             json_decref(json);
             return 1;
         }
@@ -143,9 +160,8 @@ config_load(char* config_filename) {
         known_node->port = atoi(port_text);
         known_node->status = KNOWN_NODE_INACTIVE;
         server.known_nodes[i] = known_node;
-        printf("%s (%u) activo: %u\n", known_node->ip, known_node->port, known_node->status);
     }
-    json_decref(json);
+    json_decref(main_json);
     return 0;
 }
 
@@ -154,20 +170,11 @@ int
 main(int argc, char** argv) {
     pid_t pid;
 
-    // Inicializamos el chunk de memoria
-    //memset(pipe_buf, 0, PIPE_SIZE);
-
     // Llamamos a pipe() antes del fork para que el hijo herede los FD abiertos por pipe() ;)
     // Este es un mecanismo de IPC para comunicar los 2 procesos
     // pipe_fds es un array de 2 posiciones en la 0 se lee en la 1 se escribe
     pipe(pipe_fds);
 
-    /*TODO: Antes del fork() tenemos que
-         config_load() donde cargamos toda la conf y alguna magia...
-         sygnals_initialize() Manejador de signals
-         server_parse_arguments(argc, argv) (Tenemos?)
-         Iniciar el file_system_reader() (?)
-    */
     if (parse_arguments(argc, argv) == -1) {
         fprintf(stderr, "[!] Error parseando argumentos.\n");
         return EXIT_FAILURE;
@@ -213,7 +220,6 @@ main(int argc, char** argv) {
         }
         // Antes de salir esperamos al otro hijo!
         waitpid(pid, NULL, 0);
-        //server_shutdown();
     }
     return EXIT_SUCCESS;
 }

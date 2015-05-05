@@ -114,7 +114,6 @@ task_parse_list_message(char *message) {
 	char* ip;
 
 	task = NULL;
-	//task = (Task*)malloc(sizeof(Task));
 	fprintf(stderr, "task_parse_list_message()\n");
 
 	aux = strdup(message);

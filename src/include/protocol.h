@@ -23,8 +23,8 @@
 #define LAST_FILE_SEGMENT 310
 #define BYE 400
 #define EXIST_FILE 600
-// tamaños utiles
-#define PAYLOAD_SIZE 4096
+// tamaño usado para enviar archivos
+#define PAYLOAD_SIZE 8192
 
 
 int read_n_bytes(int sd, void *buffer, int n);

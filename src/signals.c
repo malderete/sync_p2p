@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "include/ipc_protocol.h"
 #include "include/signals.h"
 #include "include/tasks.h"
 
@@ -14,7 +15,8 @@ void
 signals_handler(int signal) {
     fprintf(stderr, "========== Signals Handler ==========\n");
     fprintf(stderr, "Signal Recibida: %s\n", strsignal(signal));
-    write(pipe_fds[1], STOP_MESSAGE, sizeof(STOP_MESSAGE));
+    //write(pipe_fds[1], STOP_MESSAGE, sizeof(STOP_MESSAGE));
+    ipc_send_message(pipe_fds[1], STOP_MESSAGE);
     fprintf(stderr, "========== End Signal Handler ==========\n");
 }
 

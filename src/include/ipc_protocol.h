@@ -15,5 +15,6 @@
 
 
 int ipc_read_message(int sd, char **message);
-int ipc_send_message(int sd, char *ip, char *message);
+//int ipc_send_message(int sd, char *ip, char *message);
+int ipc_send_message(int sd, char *message);
 #endif /* IPC_PROTOCOL_H_ */

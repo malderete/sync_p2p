@@ -10,6 +10,7 @@
 #include "include/main.h"
 #include "include/file_system.h"
 #include "include/server.h"
+#include "include/ipc_protocol.h"
 #include "include/protocol.h"
 #include "include/sessions.h"
 
@@ -59,8 +60,7 @@ int server_send_file_segment(Session *session, char *filename) {
 
         memcpy(send_buffer, file_info->content + session->offset, message_size);
         nbytes = protocol_send_message(session->fd, protocol_code, send_buffer, message_size);
-        // Bytes enviados sin el header
-        data_sent_size = nbytes - (HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH);
+        data_sent_size = nbytes;
         // Actualizamos el offset
         session->offset += data_sent_size;
     }
@@ -76,32 +76,23 @@ int server_send_file_segment(Session *session, char *filename) {
 */
 void handle_message(int sd, uint16_t message_code, char *message) {
     Session *ses;
+    char *ipc_buffer;
 
     ses = get_session(sessions, sd);
-
     printf("Cliente IP: %s, Codigo: %u, Mensaje: %s\n", ses->ip, message_code, message);
     // Aca esta el dispatcher
     // Se deberia tener una entrada del switch por cada codigo
     switch (message_code) {
         case REQUEST_LIST:
             printf("El cliente %d solicita la lista de archivos\n", sd);
-            char * big_buffer = malloc(PIPE_SIZE); // Esto hay que moverlo de aca, alocamos al pedo!!!
-            // Escribimos en el pipe el IP y la lista de archivos del cliente
-            // separados por @. Ejemplo: 192.168.1.102@file1;file2;file3;...;fileN;
+            ipc_buffer = (char *)malloc(strlen(ses->ip) + strlen(message) + 1);
+            // IP@ListaDeArchivos (192.168.1.125@archivo1:54;archivo2:152;)
+            memcpy(ipc_buffer, ses->ip, strlen(ses->ip));
+            memcpy(ipc_buffer + strlen(ses->ip), "@", sizeof(char));
+            memcpy(ipc_buffer + strlen(ses->ip) + sizeof(char), message, strlen(message));
 
-            //Mejor implementacion
-            // char * big_buffer = malloc(sizeof(unsigned int) + sizeof(ses->ip) + 1 + sizeof(message));
-            // ejemplo de mensaje
-            //   40192.168.1.12@text.txt,example.py,dns.c
-            // ip = '192.168.1.12'
-            // msg = 'text.txt,example.py,dns.c'
-            // size = 2 + 12 + 1 + 25 = 40 este valor le dice al otro lado del pipe cuando alocar ;)
-            //sprintf(big_buffer, "%u%s@%s", size, ses->ip,  message);
-
-            sprintf(big_buffer, "%s@%s", ses->ip,  message);
-            write(pipe_fds[1], big_buffer, strlen(big_buffer));
-            printf("Longitud insertada en pipe: %lu\n", strlen(big_buffer));
-            free(big_buffer);
+            ipc_send_message(pipe_fds[1], ipc_buffer);
+            free(ipc_buffer);
             break;
         case REQUEST_FILE:
             printf("El cliente %d solicita descargar/info sobre un archivo\n", sd);
@@ -113,7 +104,6 @@ void handle_message(int sd, uint16_t message_code, char *message) {
             break;
         case BYE:
             printf("El cliente %d se desea desconectar\n", sd);
-            write(pipe_fds[1], "FIN", 3);
             break;
     }
 }
@@ -153,15 +143,16 @@ int server_init_stack(void) {
     FD_ZERO(&read_fds);
 
     // Session
-    Session* s;
+    Session *s;
 
     // Tomamos un socket para hacer bind() y listen()...
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; // No importa la familiar IPv4 o IPv6
+    //hints.ai_family = AF_INET; // IPv4
     hints.ai_socktype = SOCK_STREAM; // un socket de STREAM
     hints.ai_flags = AI_PASSIVE; // Queremos poder hacer bind()
     // Hacemos la consulta
-    if ((rv = getaddrinfo(NULL, PORT, &hints, &ai)) != 0) {
+    if ((rv = getaddrinfo(NULL, server.server_port, &hints, &ai)) != 0) {
         fprintf(stderr, "Server: %s\n", gai_strerror(rv));
         exit(1);
     }
@@ -192,7 +183,7 @@ int server_init_stack(void) {
         exit(3);
     }
     server.status = SERVER_STATUS_ACTIVE;
-    printf("Server listening on PORT %s\n", PORT);
+    printf("Server listening on PORT %s\n", server.server_port);
 
     // Agregamos el server al conjunto 'maestro'
     FD_SET(listener, &master);

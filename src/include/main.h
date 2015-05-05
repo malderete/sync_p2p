@@ -1,7 +1,6 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
-#define PIPE_SIZE 1024 // tamanio para leer/escribir en el PIPE
 #define CLIENT_PORT 4444
 #define CONFIG_DEFAULT_SERVER_DIR "/home/tincho/proyectos/iw/"
 #define SERVER_STATUS_ACTIVE 1
@@ -23,7 +22,7 @@ struct known_node_struct {
 struct server_struct {
 	char *name;
 	int server_fd;
-	int server_port;
+	char *server_port;
 	int status;
 	char *files;
 	KnownNode** known_nodes;
