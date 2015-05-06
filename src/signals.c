@@ -12,8 +12,7 @@ extern int pipe_fds[2];
 extern Server server;
 
 
-void
-signals_handler(int signal) {
+void signals_handler(int signal) {
     fprintf(stderr, "========== Signals Handler ==========\n");
     fprintf(stderr, "Signal Recibida: %s\n", strsignal(signal));
     //write(pipe_fds[1], STOP_MESSAGE, sizeof(STOP_MESSAGE));
@@ -22,8 +21,7 @@ signals_handler(int signal) {
     server.status = SERVER_STATUS_INACTIVE;
 }
 
-int
-signals_disable() {
+int signals_disable() {
     /*
      * http://www.gnu.org/s/libc/manual/html_node/index.html#toc_Signal-Handling
      *
@@ -61,8 +59,7 @@ signals_disable() {
     return 0;
 }
 
-int
-signals_initialize() {
+int signals_initialize() {
 	/*
 	 * http://www.gnu.org/s/libc/manual/html_node/index.html#toc_Signal-Handling
 	 *

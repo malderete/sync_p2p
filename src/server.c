@@ -20,6 +20,11 @@ extern SessionList* sessions;
 extern int pipe_fds[2];
 
 
+/*
+ * Esta funcion busca un KnownNode
+ * cuya ip coincide con la ip dada.
+ * Retorna el puerto de su server.
+ */
 int server_get_port_for_active_node(char *ip) {
     int i, port;
     KnownNode *known_node;
@@ -36,6 +41,11 @@ int server_get_port_for_active_node(char *ip) {
 }
 
 
+/*
+ * Esta funcion marca el KnownNode
+ * cuya ip coincide con la dada como activo.
+ * Retorna 1 si fue posible, 0 en otro caso.
+ */
 int server_set_node_as_active(char *ip) {
     KnownNode *known_node;
     int i, done;
@@ -43,16 +53,31 @@ int server_set_node_as_active(char *ip) {
     done = 0;
     for(i=0; i < server.known_nodes_length; i++) {
         known_node = server.known_nodes[i];
-        if ((known_node->status == KNOWN_NODE_INACTIVE) && (strncmp(known_node->ip,ip, strlen(known_node->ip)) == 0)) {
-            server.known_nodes[i]->status = KNOWN_NODE_ACTIVE;
-            done = 1;
-            break;
+        if (strncmp(known_node->ip, ip, strlen(known_node->ip)) == 0) {
+            // Este bloque solo es semantico para mostar una posible situacion
+            switch (known_node->status) {
+                case KNOWN_NODE_INACTIVE:
+                    // Nodo inicia nunca fue visto
+                    server.known_nodes[i]->status = KNOWN_NODE_ACTIVE;
+                    done = 1;
+                    break;
+                case KNOWN_NODE_ACTIVE:
+                    // Nodo inicia pero ya esta como conocido
+                    server.known_nodes[i]->status = KNOWN_NODE_ACTIVE;
+                    done = 1;
+                    break;
+            }
         }
     }
     return done;
 }
 
 
+/*
+ * Esta funcion envia el CRC del archivo
+ * filename al cliente especificado en la session.
+ * Retorna la cantidad de bytes enviados.
+ */
 int server_send_file_info(Session *session, char *filename) {
     FileInfo *file_info;
     char *crc_sum;
@@ -71,6 +96,12 @@ int server_send_file_info(Session *session, char *filename) {
 }
 
 
+/*
+ * Esta funcion envia un segmento del archivo
+ * filename (si este existe) al cliente especificado
+ * en la session.
+ * Retorna la cantidad de bytes enviados.
+ */
 int server_send_file_segment(Session *session, char *filename) {
     FileInfo *file_info;
     char send_buffer[PAYLOAD_SIZE];
@@ -104,49 +135,49 @@ int server_send_file_segment(Session *session, char *filename) {
 
 
 /*
-* Esta funcion es la encargada de manejar los codigos/mensajes
-* del protocolo, aca se decide que hacer :)
-* Funciona como un dispatcher, es decir, toma una desicion en base
-* al codigo (identificador del mensaje) en nuestro caso
-*/
+ * Esta funcion es la encargada de manejar los codigos/mensajes
+ * del protocolo, aca se decide que hacer :)
+ * Funciona como un dispatcher, es decir, toma una desicion en base
+ * al codigo (identificador del mensaje) en nuestro caso
+ */
 void handle_message(int sd, uint16_t message_code, char *message) {
     Session *ses;
     char *ipc_buffer;
 
     ses = get_session(sessions, sd);
-    printf("Cliente IP: %s, Codigo: %u, Mensaje: %s\n", ses->ip, message_code, message);
+    printf("[*] Cliente IP: %s, Codigo: %u, Mensaje: %s\n", ses->ip, message_code, message);
     // Aca esta el dispatcher
     // Se deberia tener una entrada del switch por cada codigo
     switch (message_code) {
         case REQUEST_LIST:
             // Nos aseguramos que el nodo este activo para nosotros
             server_set_node_as_active(ses->ip);
-            printf("El cliente %d solicita la lista de archivos\n", sd);
-            ipc_buffer = (char *)malloc(strlen(ses->ip) + strlen(message) + sizeof(char)*2);
+            printf("[*] El cliente %d envia la lista de archivos\n", sd);
+            ipc_buffer = (char *)malloc(strlen(ses->ip) + strlen(message) + sizeof(char));
             sprintf(ipc_buffer, "%s@%s", ses->ip, message);
 
             ipc_send_message(pipe_fds[1], ipc_buffer);
             free(ipc_buffer);
             break;
         case REQUEST_CRC:
-            printf("El cliente %d solicita descargar/info sobre un archivo\n", sd);
+            printf("[*] El cliente %d solicita el CRC de un archivo\n", sd);
             server_send_file_info(ses, message);
             break;
         case FILE_SEGMENT:
-            printf("El cliente %d solicita un segmento de un archivo\n", sd);
+            printf("[*] El cliente %d solicita un segmento de un archivo\n", sd);
             server_send_file_segment(ses, message);
             break;
         case BYE:
-            printf("El cliente %d se desea desconectar\n", sd);
+            printf("[*] El cliente %d se desea desconectar\n", sd);
             break;
     }
 }
 
 
 /*
-* Inicia el bucle principal del proceso PADRE
-* que es el servidor de archivos
-*/
+ * Inicia el bucle principal del proceso PADRE
+ * que es el servidor de archivos
+ */
 int server_init_stack(void) {
     // Conjuntos para monitorear con select()
     fd_set master;
@@ -268,6 +299,7 @@ int server_init_stack(void) {
                         sessions = add_session(sessions, s);
                     }
                 } else { // Algun cliente tiene datos...
+                     memset(message_buffer, 0, MAX_SIZE);
                      nbytes = protocol_read_message(who, &message_code, message_buffer);
                      // Verificamos posibles errores
                      if (nbytes <= 0) {

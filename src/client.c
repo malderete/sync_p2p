@@ -77,6 +77,8 @@ void downloader_download(Task *task) {
             printf("[!] Error al eliminar archivo invalido: %s\n", file_path);
         }
     }
+    // Desconectarnos del server ya terminamos este archivo!
+    close(sd);
 }
 
 
@@ -116,12 +118,12 @@ void *downloader_worker_thread(void *worker_data) {
 
 
 /*
-* Intenta conectarse a cada uno de los nodos conocidos
-* para intercambiar la lista de archivos
-* Este caso se da cuando este nodo no es el primero en
-* iniciar.
-*
-*/
+ * Intenta conectarse a cada uno de los nodos conocidos
+ * para intercambiar la lista de archivos y marcar el nodo
+ * como activo.
+ * Intenta realizar una conexion TCP con cada nodo
+ * (connect() y close())
+ */
 void client_broadcast_nodes() {
     int sd_known_node, sockadd_size, i;
     uint16_t code;
@@ -163,9 +165,9 @@ void client_broadcast_nodes() {
 
 
 /*
-* Inicia el bucle principal del proceso HIJO
-* que planifica las descargas
-*/
+ * Inicia el bucle principal del proceso HIJO
+ * que planifica las descargas
+ */
 void downloader_init_stack(void) {
     char *ipc_buffer;
     char *ipc_buffer_cpy;

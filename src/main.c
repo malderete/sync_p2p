@@ -38,8 +38,7 @@ SessionList* sessions = NULL;
 char* config_filename;
 
 
-static void
-show_help(char** argv) {
+static void show_help(char** argv) {
     printf(
         "IW Sync_P2P Server v 0.1\n\n"
         "  -h            Muestra esta ayuda.\n"
@@ -52,8 +51,7 @@ show_help(char** argv) {
 }
 
 
-static int
-parse_arguments(int argc, char** argv) {
+static int parse_arguments(int argc, char** argv) {
 	int c;
 	while((c = getopt(argc, argv, "hc:")) != -1) {
 		switch(c) {
@@ -75,8 +73,7 @@ parse_arguments(int argc, char** argv) {
 }
 
 
-int
-config_load(char* config_filename) {
+int config_load(char* config_filename) {
     json_t *main_json;
     json_error_t error;
 
@@ -193,8 +190,7 @@ config_load(char* config_filename) {
 }
 
 
-int
-main(int argc, char** argv) {
+int main(int argc, char** argv) {
     pid_t pid;
 
     // Llamamos a pipe() antes del fork para que el hijo herede los FD abiertos por pipe() ;)
