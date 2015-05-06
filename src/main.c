@@ -1,3 +1,15 @@
+/*
+ * Sync P2P File Synchronizer
+ * http://github.com/malderete/sync_p2p
+ *
+ * FRLP UTN - INTERNETWORKING 2013 - GRUPO 2
+ * http://www.frlp.utn.edu.ar/materias/internetworking/
+ *
+ * Alderete, Martin <malderete@gmail.com>
+ * Ayastuy, Alejandra <alejandra.ayastuy@gmail.com>
+ * Vicente, Diego <dvicentea@gmail.com>
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -9,6 +21,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#include <jansson.h>
 
 #include "include/client.h"
 #include "include/dns.h"
@@ -19,7 +32,6 @@
 #include "include/signals.h"
 #include "include/parse_file.h"
 
-#include <jansson.h>
 
 // Definimos como alocar!
 #define KNOWN_NODE_LIST_NEW(size) calloc(size, sizeof(KnownNode *));
@@ -220,10 +232,8 @@ int main(int argc, char** argv) {
             server.name, server.server_port,
             server.share_directory, server.download_directory
     );
-    //const char* directory = CONFIG_DEFAULT_SERVER_DIR;
-    //filesystem_load(directory);
-    filesystem_load(server.share_directory);
 
+    filesystem_load(server.share_directory);
     server.status = SERVER_STATUS_INACTIVE;
 
     pid = fork();

@@ -19,8 +19,10 @@
 // Codigos
 #define REQUEST_LIST 100
 #define REQUEST_CRC 200
+#define RESPONSE_CRC 210
 #define FILE_SEGMENT 300
 #define LAST_FILE_SEGMENT 310
+#define NOT_FOUND 404
 #define BYE 400
 #define EXIST_FILE 600
 // tamaño usado para enviar archivos

@@ -90,7 +90,10 @@ int server_send_file_info(Session *session, char *filename) {
     if (file_info) {
         nbytes = crc_md5sum_wrapper(file_info->abs_path, &crc_sum);
         //printf("Server CRC: %s (%d bytes)\n", crc_sum, nbytes);
-        nbytes = protocol_send_message(session->fd, REQUEST_CRC, crc_sum, nbytes);
+        nbytes = protocol_send_message(session->fd, RESPONSE_CRC, crc_sum, nbytes);
+    } else {
+        // archivo no encontrado
+        nbytes = protocol_send_message(session->fd, NOT_FOUND, filename, strlen(filename));
     }
     return nbytes;
 }
@@ -129,6 +132,9 @@ int server_send_file_segment(Session *session, char *filename) {
         data_sent_size = nbytes;
         // Actualizamos el offset
         session->offset += data_sent_size;
+    } else {
+        // archivo no encontrado
+        nbytes = protocol_send_message(session->fd, NOT_FOUND, filename, strlen(filename));
     }
     return nbytes;
 }
