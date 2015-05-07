@@ -1,4 +1,6 @@
+#include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -118,6 +120,86 @@ void *downloader_worker_thread(void *worker_data) {
 
 
 /*
+ * Intenta conectarse a un nodo y espera un timeout
+ * especificado, para esto debe poner el socket en modo
+ * no-bloqueante utiliza select() y luego vuelve el socket
+ * a modo bloqueante.
+ * Retorna 0 en caso de exito en otro caso retorna -1
+ */
+int client_broadcast_connect_timeout(int sock, struct sockaddr_in sa, int timeout) {
+    int flags = 0, error = 0, ret = 0;
+    int sockaddr_size = sizeof(sa);
+    fd_set rset, wset;
+    socklen_t len = sizeof(error);
+    // Aca configuramos el timeout
+    struct timeval ts;
+
+    ts.tv_sec = timeout;
+    ts.tv_usec = 0;
+
+    //Conjunto susados por select()
+    FD_ZERO(&rset);
+    FD_SET(sock, &rset);
+    // copia del conjunto
+    wset = rset;
+
+    // Ponemos el sock en NO-BOQUEANTE
+    if( (flags = fcntl(sock, F_GETFL, 0)) < 0) {
+        return -1;
+    }
+
+    if(fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) {
+        return -1;
+    }
+
+    // connect() en NO-BLOQUEANTE
+    if( (ret = connect(sock, (struct sockaddr *)&sa, sockaddr_size )) < 0 ) {
+        if (errno != EINPROGRESS) {
+            return -1;
+        }
+    }
+
+    // connect() termino OK!
+    if(ret == 0) {
+        goto success;
+    }
+
+    // esperamos que connect() termine o de timeout
+    if( (ret = select(sock + 1, &rset, &wset, NULL, (timeout) ? &ts : NULL)) < 0) {
+        return -1;
+    }
+
+    if(ret == 0) {
+        // Hubo timeout
+        errno = ETIMEDOUT;
+        return -1;
+    }
+
+    // select() retorno algo, Todo parece estar OK tenemos un fd valido
+    if (FD_ISSET(sock, &rset) || FD_ISSET(sock, &wset)){
+        if(getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+            return -1;
+        }
+    } else {
+        return -1;
+    }
+
+    if (error) {
+        // Tuvimos algun error
+        errno = error;
+        return -1;
+    }
+
+success:
+    // Regresamos el socket a BLOQUEANTE y retornamos 0
+    if(fcntl(sock, F_SETFL, flags) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+
+/*
  * Intenta conectarse a cada uno de los nodos conocidos
  * para intercambiar la lista de archivos y marcar el nodo
  * como activo.
@@ -125,7 +207,7 @@ void *downloader_worker_thread(void *worker_data) {
  * (connect() y close())
  */
 void client_broadcast_nodes() {
-    int sd_known_node, sockadd_size, i;
+    int sd_known_node, i;
     uint16_t code;
     struct sockaddr_in sockadd;
     KnownNode *known_node_to_check;
@@ -133,7 +215,6 @@ void client_broadcast_nodes() {
 
     // Configuro un sockadd_in para intentar conectarnos
     // todos los nodos tienen la misma familia
-    sockadd_size = sizeof(sockadd);
     sockadd.sin_family = AF_INET;
 
     code = REQUEST_LIST;
@@ -151,14 +232,18 @@ void client_broadcast_nodes() {
         sockadd.sin_port = htons(known_node_to_check->port);
 
         //Intentamos conectarnos para ver si esta vivo!
-        if (connect(sd_known_node, (struct sockaddr*)&sockadd, sockadd_size) >= 0) {
-            printf("[*] IP=%s Port=%u (nodo ACTIVO), Intercambiando lista de archivos\n", known_node_to_check->ip, known_node_to_check->port);
+        if (client_broadcast_connect_timeout(sd_known_node, sockadd, 5) == 0) {
+            printf("[*] IP=%s Port=%u (nodo ACTIVO), Intercambiando lista de archivos\n", 
+                    known_node_to_check->ip, known_node_to_check->port
+            );
             // marco el KnownNode como ACTIVO, envio y desconecto
             known_node_to_check->status = KNOWN_NODE_ACTIVE;
             protocol_send_message(sd_known_node, code, files_list_buffer, strlen(files_list_buffer));
             close(sd_known_node);
         } else {
-            printf("[*] IP=%s port=%u (nodo INACTIVO)\n", known_node_to_check->ip, known_node_to_check->port);
+            printf("[*] IP=%s port=%u (nodo INACTIVO)\n",
+                    known_node_to_check->ip, known_node_to_check->port
+            );
         }
     }
 }
