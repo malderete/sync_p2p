@@ -12,7 +12,7 @@ struct file_struct {
 
 void filesystem_load(const char *dir_name);
 void _list_dir(const char *dir_name, int *size);
-void serialize_files(char *buffer);
+void serialize_files(char **buffer);
 void _filesystem_print(int size);
 FileInfo* file_system_get(char* filename);
 

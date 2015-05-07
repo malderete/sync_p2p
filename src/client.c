@@ -138,7 +138,7 @@ void client_broadcast_nodes() {
 
     code = REQUEST_LIST;
     files_list_buffer = (char *)malloc(1024);
-    serialize_files(files_list_buffer);
+    serialize_files(&files_list_buffer);
     printf("[*] Buscando nodos conocidos...\n");
     for(i=0; i < server.known_nodes_length; i++) {
         sd_known_node = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
