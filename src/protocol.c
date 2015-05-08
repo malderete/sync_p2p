@@ -66,6 +66,28 @@ int protocol_read_message(int sd, uint16_t * code, char *message) {
 
 
 /*
+ * Envia por el socket sd el mensaje en el buffer
+ * con el tamaño size. Esta funcion maneje envios
+ * parciales para asegurar el envio.
+ */
+int send_all(int sd, char *buffer, int size) {
+    int total = 0;
+    int bytes_left = size;
+    int n;
+
+    while(total < size) {
+        n = send(sd, buffer + total, bytes_left, 0);
+        if (n == -1) {
+            break;
+        }
+        total += n;
+        bytes_left -= n;
+    }
+    return total;
+}
+
+
+/*
 * Enviamos un 'mensaje' de nuestro protocolo
 * Retorna la cantidad de bytes enviados  en el payload
 * sin tener encuenta el HEADER
@@ -84,8 +106,7 @@ int protocol_send_message(int sd, uint16_t code, char *message, int message_size
     memcpy(buffer + HEADER_CODE_LENGTH , &lon_nbo , HEADER_SIZE_LENGTH);
     memcpy(buffer + HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH, message, message_size);
 
-    // Esto no me convonce, ponerlo en un WHILE!
-    n = send(sd, buffer, (HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH + message_size), 0);
-
+    n = send_all(sd, buffer, (HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH + message_size));
+    //retornamos la cantidad de bytes en el campo MESSAGE
     return (n - (HEADER_CODE_LENGTH + HEADER_SIZE_LENGTH));
 }

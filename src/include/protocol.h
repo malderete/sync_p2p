@@ -30,6 +30,7 @@
 
 
 int read_n_bytes(int sd, void *buffer, int n);
+int send_all(int sd, char *buffer, int size);
 int protocol_read_message(int sd, uint16_t * code, char *message);
 int protocol_send_message(int sd, uint16_t code, char *message, int message_size);
 
